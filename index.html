@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>दूध संकलन — Farmer Login</title>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js"></script>
+
+<style>
+  body { font-family:'Noto Sans Devanagari', sans-serif; background:#f5f5f5; margin:0; }
+  .box { max-width:420px; margin:40px auto; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); }
+  h2 { text-align:center; color:#006400; margin-bottom:10px; }
+  input { width:100%; padding:10px; font-size:16px; margin:8px 0; border:1px solid #ccc; border-radius:6px; }
+  button { width:100%; background:#006400; color:#fff; border:none; padding:10px; font-size:16px; border-radius:6px; cursor:pointer; }
+  button:hover { background:#004d00; }
+  table { width:100%; border-collapse:collapse; margin-top:15px; font-size:15px; }
+  th,td { border:1px solid #ddd; padding:8px; text-align:center; }
+  th { background:#006400; color:#fff; }
+  #recaptcha-container { margin:10px 0; }
+</style>
+</head>
+<body>
+
+<div class="box" id="loginBox">
+  <h2>शेतकरी लॉगिन</h2>
+  <input type="text" id="phone" placeholder="+91XXXXXXXXXX" />
+  <div id="recaptcha-container"></div>
+  <button onclick="sendOTP()">ओटीपी पाठवा</button>
+  <input type="text" id="otp" placeholder="ओटीपी टाका" />
+  <button onclick="verifyOTP()">लॉगिन करा</button>
+  <p id="msg"></p>
+</div>
+
+<div class="box" id="dataBox" style="display:none;">
+  <h2 id="farmerName"></h2>
+  <table id="milkTable">
+    <thead>
+      <tr>
+        <th>दिनांक</th>
+        <th>दिवस (L)</th>
+        <th>रात्र (L)</th>
+        <th>एकूण ₹</th>
+        <th>पेमेंट</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script type="module">
+  // --- Your Firebase Config ---
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+  import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+  import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDAPIylSFOKGA6Tpu8kmn2otF4L0SpQh6g",
+    authDomain: "mcollections-22e3f.firebaseapp.com",
+    databaseURL: "https://mcollections-22e3f-default-rtdb.firebaseio.com",
+    projectId: "mcollections-22e3f",
+    storageBucket: "mcollections-22e3f.firebasestorage.app",
+    messagingSenderId: "798498490029",
+    appId: "1:798498490029:web:86db83ee562a2d2f12e824",
+    measurementId: "G-5LEYGZJQCY"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+
+  let confirmationResult;
+
+  // Send OTP
+  window.sendOTP = function() {
+    const phone = document.getElementById('phone').value;
+    window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', { 'size': 'normal' }, auth);
+    signInWithPhoneNumber(auth, phone, window.recaptchaVerifier)
+      .then(result => { confirmationResult = result; document.getElementById('msg').innerText="ओटीपी पाठविला गेला"; })
+      .catch(e => alert(e.message));
+  }
+
+  // Verify OTP
+  window.verifyOTP = function() {
+    const code = document.getElementById('otp').value;
+    confirmationResult.confirm(code)
+      .then(res => {
+        const user = res.user;
+        document.getElementById('loginBox').style.display='none';
+        loadFarmerData(user.uid);
+      })
+      .catch(()=>alert("चुकीचा ओटीपी"));
+  }
+
+  // Load Farmer Data
+  async function loadFarmerData(uid){
+    const farmerRef = ref(db, 'farmers/' + uid);
+    const snap = await get(farmerRef);
+    if(!snap.exists()){ alert("नोंद सापडली नाही!"); return; }
+
+    const farmer = snap.val();
+    document.getElementById('dataBox').style.display='block';
+    document.getElementById('farmerName').innerText = "स्वागत आहे, " + (farmer.name || "");
+
+    const tbody = document.querySelector('#milkTable tbody');
+    tbody.innerHTML="";
+    const records = farmer.records || {};
+    for(let date in records){
+      const r = records[date];
+      const total = (r.day?.amount||0)+(r.night?.amount||0);
+      tbody.innerHTML += `
+        <tr>
+          <td>${date}</td>
+          <td>${r.day?.litres||0}</td>
+          <td>${r.night?.litres||0}</td>
+          <td>₹${total}</td>
+          <td>${r.payment_status||'-'}</td>
+        </tr>`;
+    }
+  }
+</script>
+</body>
+</html>
