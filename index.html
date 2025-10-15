@@ -75,13 +75,40 @@
   let confirmationResult;
 
   // Send OTP
-  window.sendOTP = function() {
-    const phone = document.getElementById('phone').value;
-    window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', { 'size': 'normal' }, auth);
-    signInWithPhoneNumber(auth, phone, window.recaptchaVerifier)
-      .then(result => { confirmationResult = result; document.getElementById('msg').innerText="ओटीपी पाठविला गेला"; })
-      .catch(e => alert(e.message));
+  // Initialize reCAPTCHA once (outside sendOTP)
+window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
+  'size': 'normal',
+  'callback': (response) => {
+    // reCAPTCHA solved
+  },
+  'expired-callback': () => {
+    alert("reCAPTCHA expired, please verify again");
   }
+}, auth);
+
+recaptchaVerifier.render();
+
+// Send OTP function
+window.sendOTP = function() {
+  const phone = document.getElementById('phone').value;
+
+  if (!phone.startsWith('+')) {
+    alert('कृपया योग्य मोबाइल नंबर लिहा (उदा. +919876543210)');
+    return;
+  }
+
+  const appVerifier = window.recaptchaVerifier;
+
+  signInWithPhoneNumber(auth, phone, appVerifier)
+    .then(result => {
+      confirmationResult = result;
+      document.getElementById('msg').innerText = "✅ ओटीपी पाठविला गेला";
+    })
+    .catch(e => {
+      console.error(e);
+      alert("त्रुटी: " + e.message);
+    });
+};
 
   // Verify OTP
   window.verifyOTP = function() {
