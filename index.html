@@ -1,58 +1,13 @@
 <!DOCTYPE html>
 <html lang="mr">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>दूध संकलन — Farmer Login</title>
-<!-- Firebase SDKs (modular) -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js"></script>
-
-<style>
-  body { font-family:'Noto Sans Devanagari', sans-serif; background:#f5f5f5; margin:0; }
-  .box { max-width:420px; margin:40px auto; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); }
-  h2 { text-align:center; color:#006400; margin-bottom:10px; }
-  input { width:100%; padding:10px; font-size:16px; margin:8px 0; border:1px solid #ccc; border-radius:6px; }
-  button { width:100%; background:#006400; color:#fff; border:none; padding:10px; font-size:16px; border-radius:6px; cursor:pointer; }
-  button:hover { background:#004d00; }
-  table { width:100%; border-collapse:collapse; margin-top:15px; font-size:15px; }
-  th,td { border:1px solid #ddd; padding:8px; text-align:center; }
-  th { background:#006400; color:#fff; }
-  .small { font-size:14px; color:#555; text-align:center; margin-top:8px; }
-</style>
-</head>
-<body>
-
-<div class="box" id="loginBox">
-  <h2>भावेश्वरी दूध संस्था लॉगिन</h2>
-  <input type="text" id="phone" placeholder="ग्राहक क्रमांक@farmer.com (उदा.45@farmer.com)" />
-  <input type="password" id="password" placeholder="पासवर्ड" />
-  <button onclick="login()">लॉगिन करा</button>
-  <p id="msg" class="small"></p>
-</div>
-
-<div class="box" id="dataBox" style="display:none;">
-  <h2 id="farmerName"></h2>
-  <table id="milkTable">
-    <thead>
-      <tr>
-        <th>दिनांक</th>
-        <th>दिवस (L)</th>
-        <th>रात्र (L)</th>
-        <th>एकूण ₹</th>
-        <th>पेमेंट</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  <p class="small"><button onclick="logout()">Logout</button></p>
-</div>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCollections — Farmer Panel</title>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-  import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+  import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDAPIylSFOKGA6Tpu8kmn2otF4L0SpQh6g",
@@ -66,69 +21,64 @@
   };
 
   const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
   const db = getDatabase(app);
 
-  // Helper: create synthetic email from phone
-  function phoneToEmail(phoneStr){
-    // remove leading + if present and non-digits
-    let digits = phoneStr.replace(/\D/g,'');
-    // final email
-    return digits + "@farmer.com";
-  }
+  window.showRecords = async function(){
+    const farmerId = document.getElementById("farmerId").value.trim();
+    const msg = document.getElementById("msg");
+    const recordsDiv = document.getElementById("records");
+    recordsDiv.innerHTML = "";
 
-  window.login = async function(){
-    const phone = document.getElementById('phone').value.trim();
-    const password = document.getElementById('password').value;
-    const msg = document.getElementById('msg');
+    if (!farmerId) {
+      msg.innerText = "कृपया शेतकरी आयडी भरा.";
+      return;
+    }
 
-    if(!phone || !password){ msg.innerText = "कृपया फोन व पासवर्ड भरा"; return; }
-
-    const email = phoneToEmail(phone);
-    msg.innerText = "लोड करत आहे...";
+    msg.innerText = "रेकॉर्ड मिळवत आहे...";
 
     try {
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
-      const uid = userCred.user.uid;
-      msg.innerText = "";
-      document.getElementById('loginBox').style.display = 'none';
-      loadFarmerData(uid);
+      const snapshot = await get(child(ref(db), `farmers/${farmerId}/records`));
+      if (snapshot.exists()) {
+        msg.innerText = "";
+        const data = snapshot.val();
+        for (const [date, entry] of Object.entries(data)) {
+          recordsDiv.innerHTML += `
+            <div class="card">
+              <h4>${date}</h4>
+              <p>🌞 सकाळ: ${entry.morning.litres} लि × ₹${entry.morning.rate} = ₹${entry.morning.total}</p>
+              <p>🌙 रात्र: ${entry.night.litres} लि × ₹${entry.night.rate} = ₹${entry.night.total}</p>
+              <strong>एकूण: ₹${entry.totalAmount}</strong>
+            </div>
+          `;
+        }
+      } else {
+        msg.innerText = "रेकॉर्ड उपलब्ध नाहीत.";
+      }
     } catch (e) {
+      msg.innerText = "त्रुटी: " + e.message;
       console.error(e);
-      msg.innerText = "लॉगिन अयशस्वी: " + (e.message || e.code);
     }
-  }
-
-  async function loadFarmerData(uid){
-    const farmerRef = ref(db, 'farmers/' + uid);
-    const snap = await get(farmerRef);
-    if(!snap.exists()){ alert("नोंद सापडली नाही!"); return; }
-    const farmer = snap.val();
-    document.getElementById('dataBox').style.display='block';
-    document.getElementById('farmerName').innerText = "स्वागत आहे, " + (farmer.name || "");
-    const tbody = document.querySelector('#milkTable tbody');
-    tbody.innerHTML = "";
-    const records = farmer.records || {};
-    for(let date of Object.keys(records).sort().reverse()){
-      const r = records[date];
-      const total = (r.day?.amount||0) + (r.night?.amount||0);
-      tbody.innerHTML += `<tr>
-          <td>${date}</td>
-          <td>${r.day?.litres||0}</td>
-          <td>${r.night?.litres||0}</td>
-          <td>₹${total}</td>
-          <td>${r.payment_status||'-'}</td>
-        </tr>`;
-    }
-  }
-
-  window.logout = async function(){
-    await signOut(auth);
-    document.getElementById('dataBox').style.display='none';
-    document.getElementById('loginBox').style.display='block';
-    document.getElementById('phone').value='';
-    document.getElementById('password').value='';
-  }
+  };
 </script>
+
+<style>
+  body { font-family:'Noto Sans Devanagari',sans-serif; background:#f2f2f2; }
+  .box { max-width:450px; margin:40px auto; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); }
+  h2 { text-align:center; color:#006400; }
+  input,button { width:100%; padding:10px; margin:6px 0; font-size:16px; border-radius:6px; border:1px solid #ccc; }
+  button { background:#006400; color:#fff; border:none; cursor:pointer; }
+  button:hover { background:#004d00; }
+  #records .card { background:#f9f9f9; padding:10px; margin:8px 0; border-radius:6px; border:1px solid #ddd; }
+  #msg { text-align:center; color:#333; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h2>दूध संकलन — Farmer Panel</h2>
+    <input type="text" id="farmerId" placeholder="शेतकरी आयडी (उदा. 45)">
+    <button onclick="showRecords()">रेकॉर्ड पहा</button>
+    <p id="msg"></p>
+    <div id="records"></div>
+  </div>
 </body>
 </html>
